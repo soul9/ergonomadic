@@ -12,6 +12,8 @@ import (
 	"strings"
 	"syscall"
 	"time"
+	"crypto/tls"
+	"io/ioutil"
 )
 
 type ServerCommand interface {
@@ -191,6 +193,7 @@ func (s *Server) listen(addr string) {
 	if err != nil {
 		log.Fatal(s, "listen error: ", err)
 	}
+	listener = s.tlsListener(listener)
 
 	Log.info.Printf("%s listening on %s", s, addr)
 
@@ -206,6 +209,41 @@ func (s *Server) listen(addr string) {
 			s.newConns <- conn
 		}
 	}()
+}
+
+//
+// wrap around tlsListener
+//
+
+func (s *Server) tlsListener(listener net.Listener) net.Listener {
+	fkey, err := os.Open("ssl.key")
+	if err != nil {
+		log.Fatal(s, "can't open ssl.key: ", err)
+	}
+	fcrt, err := os.Open("ssl.crt")
+	if err != nil {
+		log.Fatal(s, "can't open ssl.crt: ", err)
+	}
+	key, err := ioutil.ReadAll(fkey)
+	if err != nil {
+		log.Fatal(s, "can't read ssl.key: ", err)
+	}
+	crt, err := ioutil.ReadAll(fcrt)
+	if err != nil {
+		log.Fatal(s, "can't read ssl.crt: ", err)
+	}
+
+	sslCert, err := tls.X509KeyPair(crt, key)
+	if err != nil {
+		log.Fatal(s, "X509KeyPair: ", err)
+	}
+
+	TLS := new(tls.Config)
+	if TLS.NextProtos == nil {
+		TLS.NextProtos = []string{"http/1.1"}
+	}
+	TLS.Certificates = []tls.Certificate{sslCert}
+	return tls.NewListener(listener, TLS)
 }
 
 //
