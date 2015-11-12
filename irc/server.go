@@ -220,10 +220,12 @@ func (s *Server) tlsListener(listener net.Listener) net.Listener {
 	if err != nil {
 		log.Fatal(s, "can't open ssl.key: ", err)
 	}
+	defer fkey.Close()
 	fcrt, err := os.Open("ssl.crt")
 	if err != nil {
 		log.Fatal(s, "can't open ssl.crt: ", err)
 	}
+	defer fcrt.Close()
 	key, err := ioutil.ReadAll(fkey)
 	if err != nil {
 		log.Fatal(s, "can't read ssl.key: ", err)
