@@ -2,8 +2,10 @@ package irc
 
 import (
 	"bufio"
+	"crypto/tls"
 	"database/sql"
 	"fmt"
+	"io/ioutil"
 	"log"
 	"net"
 	"net/http"
@@ -12,8 +14,6 @@ import (
 	"strings"
 	"syscall"
 	"time"
-	"crypto/tls"
-	"io/ioutil"
 )
 
 type ServerCommand interface {
@@ -41,6 +41,8 @@ type Server struct {
 	signals   chan os.Signal
 	whoWas    *WhoWasList
 	theaters  map[Name][]byte
+	TLSCert   string
+	TLSKey    string
 }
 
 var (
@@ -69,10 +71,18 @@ func NewServer(config *Config) *Server {
 		server.password = config.Server.PasswordBytes()
 	}
 
+	if (config.Server.TLSCert != "") && (config.Server.TLSKey != "") {
+		server.TLSCert = config.Server.TLSCert
+		server.TLSKey = config.Server.TLSKey
+	}
+
 	server.loadChannels()
 
 	for _, addr := range config.Server.Listen {
-		server.listen(addr)
+		server.listen(addr, false)
+	}
+	for _, addr := range config.Server.Listenssl {
+		server.listen(addr, true)
 	}
 
 	if config.Server.Wslisten != "" {
@@ -188,12 +198,16 @@ func (server *Server) Run() {
 // listen goroutine
 //
 
-func (s *Server) listen(addr string) {
+func (s *Server) listen(addr string, ssl bool) {
 	listener, err := net.Listen("tcp", addr)
 	if err != nil {
 		log.Fatal(s, "listen error: ", err)
 	}
-	listener = s.tlsListener(listener)
+	if ssl && s.TLSKey != "" {
+		listener = s.tlsListener(listener)
+	} else if ssl {
+		log.Fatal("listen requested with ssl, but no ssl key provided.")
+	}
 
 	Log.info.Printf("%s listening on %s", s, addr)
 
@@ -216,12 +230,12 @@ func (s *Server) listen(addr string) {
 //
 
 func (s *Server) tlsListener(listener net.Listener) net.Listener {
-	fkey, err := os.Open("ssl.key")
+	fkey, err := os.Open(s.TLSKey)
 	if err != nil {
 		log.Fatal(s, "can't open ssl.key: ", err)
 	}
 	defer fkey.Close()
-	fcrt, err := os.Open("ssl.crt")
+	fcrt, err := os.Open(s.TLSCert)
 	if err != nil {
 		log.Fatal(s, "can't open ssl.crt: ", err)
 	}
@@ -241,9 +255,6 @@ func (s *Server) tlsListener(listener net.Listener) net.Listener {
 	}
 
 	TLS := new(tls.Config)
-	if TLS.NextProtos == nil {
-		TLS.NextProtos = []string{"http/1.1"}
-	}
 	TLS.Certificates = []tls.Certificate{sslCert}
 	return tls.NewListener(listener, TLS)
 }

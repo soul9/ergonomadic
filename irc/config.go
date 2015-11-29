@@ -23,10 +23,13 @@ type Config struct {
 		PassConfig
 		Database string
 		Listen   []string
+		Listenssl []string
 		Wslisten string
 		Log      string
 		MOTD     string
 		Name     string
+		TLSCert  string
+		TLSKey   string
 	}
 
 	Operator map[string]*PassConfig
