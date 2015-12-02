@@ -71,7 +71,7 @@ func LoadConfig(filename string) (config *Config, err error) {
 		err = errors.New("server.database missing")
 		return
 	}
-	if len(config.Server.Listen) == 0 {
+	if len(config.Server.Listen) == 0 && len(config.Server.Listenssl) == 0 {
 		err = errors.New("server.listen missing")
 		return
 	}
